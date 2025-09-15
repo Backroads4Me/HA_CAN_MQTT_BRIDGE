@@ -18,9 +18,9 @@ jobs:
 
       # This is the new, updated build step
       - name: Build and push Add-on images
-        uses: home-assistant/builder@v1
+        uses: home-assistant/actions/addon-builder@master
         with:
-          path: ./can-mqtt-bridge
+          path: .
           test: false
           # The following docker-hub inputs are optional if you're only publishing to GHCR
           # They can be removed if you haven't set up Docker Hub secrets
