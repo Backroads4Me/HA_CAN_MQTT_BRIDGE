@@ -20,9 +20,10 @@ jobs:
       - name: Build and push Add-on images
         uses: home-assistant/builder@master
         with:
-          path: .
-          test: false
-          # The following docker-hub inputs are optional if you're only publishing to GHCR
+          # The following docker-hub args are optional if you're only publishing to GHCR
           # They can be removed if you haven't set up Docker Hub secrets
-          docker-hub-username: ${{ secrets.DOCKER_USERNAME }}
-          docker-hub-password: ${{ secrets.DOCKER_PASSWORD }}
+          args: |
+            --target . \
+            --all \
+            --docker-hub ${{ secrets.DOCKER_USERNAME }} \
+            --docker-password ${{ secrets.DOCKER_PASSWORD }}
