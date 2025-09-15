@@ -39,7 +39,7 @@ jobs:
         id: version
         uses: docker/metadata-action@v4
         with:
-          images: ghcr.io/${{ github.repository_owner }}/ha_can_mqtt_bridge
+          images: ghcr.io/${{ github.repository_owner | lower }}/ha_can_mqtt_bridge
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -52,7 +52,7 @@ jobs:
           file: ./Dockerfile
           platforms: linux/${{ matrix.arch }}
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.arch }}-ha_can_mqtt_bridge:${{ steps.version.outputs.version }}
+          tags: ghcr.io/${{ github.repository_owner | lower }}/${{ matrix.arch }}-ha_can_mqtt_bridge:${{ steps.version.outputs.version }}
           build-args: |
             BUILD_FROM=ghcr.io/home-assistant/${{ matrix.arch }}-base:latest
             BUILD_VERSION=${{ steps.version.outputs.version }}
