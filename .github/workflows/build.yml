@@ -29,18 +29,22 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+
+      - name: Set lowercase owner
+        id: lowercase
+        run: echo "OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
       - name: Login to GitHub Container Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}
+          username: ${{ env.OWNER }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set lowercase owner
-        id: lowercase
-        run: echo "OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
       - name: Get version
         id: version
@@ -51,6 +55,9 @@ jobs:
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
+
+      - name: Pull base image
+        run: docker pull ghcr.io/home-assistant/${{ matrix.arch }}-base:latest
 
       - name: Build and push
         uses: docker/build-push-action@v4
@@ -63,3 +70,6 @@ jobs:
           build-args: |
             BUILD_FROM=ghcr.io/home-assistant/${{ matrix.arch }}-base:latest
             BUILD_VERSION=${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
