@@ -1,9 +1,10 @@
+# Add-on configuration file: can-mqtt-bridge/config.yaml
+
 name: "CAN to MQTT Bridge"
 version: "1.0.0"
 slug: "ha_can_mqtt_bridge"
 description: "Initializes CAN interface and provides a bidirectional CAN-MQTT bridge"
 url: "https://github.com/Backroads4Me/HA_CAN_MQTT_BRIDGE"
-image: "ghcr.io/backroads4me/{arch}-ha_can_mqtt_bridge"
 panel_icon: "mdi:car-connected"
 panel_title: "CAN Bridge"
 arch:
@@ -15,45 +16,28 @@ arch:
 init: false
 startup: application
 boot: manual
-
-# Security rating (1-6)
-# Lower due to required hardware access permissions
 rating: 2
-
-# Required for CAN interface management
 host_network: true
 kernel_modules: true
 devices:
   - "/dev/can0:/dev/can0:rwm"
   - "/dev/bus/usb:/dev/bus/usb:rwm"
-
-# Security enhancements
 auth_api: true
 apparmor: true
-security_opt:
-  - apparmor=profile
 hassio_api: true
 hassio_role: default
-
-# Service discovery
 services:
-  - mqtt:need
-
-# Map data directory for persistent storage
+  - "mqtt:need"
 map:
-  - share:rw
-  - config:ro
-
-# Protection options
+  - "share:rw"
+  - "config:ro"
 ingress: true
 ingress_port: 8099
 panel_admin: true
-
-# Configuration options with defaults
 options:
   can_interface: "can0"
   can_bitrate: 250000
-  mqtt_host: "127.0.0.1"
+  mqtt_host: "core-mosquitto" # Recommended to use the service name
   mqtt_port: 1883
   mqtt_user: "canbus"
   mqtt_pass: ""
@@ -63,8 +47,6 @@ options:
   debug_logging: false
   ssl: false
   password: ""
-
-# Schema for configuration
 schema:
   can_interface: "str"
   can_bitrate: "list(125000|250000|500000|1000000)"

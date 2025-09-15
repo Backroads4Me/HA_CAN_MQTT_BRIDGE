@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get information
+        id: info
+        uses: home-assistant/actions/helpers/info@master
+        with:
+          path: ./can-mqtt-bridge
+
+      - name: Build and push Add-on images
+        uses: home-assistant/actions/addon-builder@master
+        with:
+          path: ./can-mqtt-bridge
+          test: false
+          platforms: ${{ fromJson(steps.info.outputs.architectures) }}
+          docker-hub-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-hub-password: ${{ secrets.DOCKER_PASSWORD }}
