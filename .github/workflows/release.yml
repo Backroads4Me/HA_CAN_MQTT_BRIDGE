@@ -26,4 +26,5 @@ jobs:
             --target . \
             --all \
             --docker-hub ${{ secrets.DOCKER_USERNAME }} \
+            --docker-user ${{ secrets.DOCKER_USERNAME }} \
             --docker-password ${{ secrets.DOCKER_PASSWORD }}
