@@ -4,7 +4,7 @@
 set -e
 
 # Ensure we're running as s6 service
-if [ -z "${S6_SERVICE_PATH}" ]; then
+if [ -z "${S6_SERVICE_PATH+x}" ]; then
   bashio::log.warning "This script is designed to run as an s6 service"
 fi
 
