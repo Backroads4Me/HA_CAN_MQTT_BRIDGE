@@ -324,16 +324,6 @@ bashio::log.info "Starting CAN->MQTT bridge..."
             if [ -n "$frame" ]; then
                 log_debug "CAN->MQTT: $frame"
                 echo "$frame"
-                
-                # Increment message counter in Home Assistant
-                if bashio::supervisor.ping; then
-                    # Get current count
-                    local current_count=$(bashio::api.supervisor GET /core/api/states/sensor.can_message_count | jq -r '.state')
-                    # Increment
-                    local new_count=$((current_count + 1))
-                    # Update sensor
-                    update_ha_sensor "sensor.can_message_count" "$new_count" '{"friendly_name": "CAN Messages Processed", "unit_of_measurement": "messages", "icon": "mdi:counter"}'
-                fi
             fi
         done | mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
                             -t "$MQTT_TOPIC_RAW" -q 1 -l
