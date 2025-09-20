@@ -17,12 +17,14 @@ init: false
 startup: application
 boot: manual
 rating: 2
-privileged: true
+privileged:
+  - NET_ADMIN
+  - NET_RAW
 host_network: true
 kernel_modules: true
 devices:
-  - "/dev/can0:/dev/can0:rwm"
-  - "/dev/bus/usb:/dev/bus/usb:rwm"
+  - "/dev/can0"
+  - "/dev/bus/usb"
 auth_api: true
 apparmor: true
 hassio_api: true
