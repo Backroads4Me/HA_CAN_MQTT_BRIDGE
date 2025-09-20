@@ -83,15 +83,15 @@ validate_config() {
 validate_can_interface() {
     bashio::log.info "Validating CAN interface after initialization..."
 
-    # Check if CAN interface exists and is up
-    if ! ip link show | grep -q "$CAN_INTERFACE"; then
+    # Check if CAN interface exists using specific interface name
+    if ! ip link show "$CAN_INTERFACE" >/dev/null 2>&1; then
         bashio::log.fatal "CAN interface $CAN_INTERFACE does not exist after initialization"
         return 1
     fi
 
     # Verify interface is operational
-    if ! ip link show "$CAN_INTERFACE" | grep -q "UP"; then
-        bashio::log.fatal "CAN interface $CAN_INTERFACE failed to initialize properly"
+    if ! ip link show "$CAN_INTERFACE" | grep -q "state UP"; then
+        bashio::log.fatal "CAN interface $CAN_INTERFACE is not in UP state"
         return 1
     fi
 
