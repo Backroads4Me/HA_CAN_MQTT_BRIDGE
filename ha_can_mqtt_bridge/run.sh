@@ -224,36 +224,37 @@ bashio::log.info "Topics - Raw: $MQTT_TOPIC_RAW, Send: $MQTT_TOPIC_SEND, Status:
 echo
 
 # ========================
-# CAN Interface Initialization
+# CAN Interface Initialization (copied from working HA_EnableCAN)
 # ========================
 bashio::log.info "Initializing CAN interface..."
 
-# Load CAN kernel modules (similar to HA_EnableCAN)
-bashio::log.info "Loading CAN kernel modules..."
-modprobe can 2>/dev/null || bashio::log.info "CAN module already loaded or not needed"
-modprobe can_raw 2>/dev/null || bashio::log.info "CAN_RAW module already loaded or not needed"
+# Print current status for debugging
+bashio::log.info "Current interface status:"
+ip link show "$CAN_INTERFACE" 2>/dev/null || bashio::log.info "Interface $CAN_INTERFACE not found (this may be normal)"
 
-# Bring interface down first (ignore errors if already down)
-ip link set "$CAN_INTERFACE" down 2>/dev/null || {
-    bashio::log.info "Interface $CAN_INTERFACE was not up (this is normal on first run)"
-}
+# If the device is already up, bring it down first
+if [ -f "/sys/class/net/$CAN_INTERFACE/operstate" ] && [ "$(cat "/sys/class/net/$CAN_INTERFACE/operstate")" == "up" ]; then
+    bashio::log.info "Interface is up, bringing it down first"
+    ip link set "$CAN_INTERFACE" down
+fi
 
-# Configure CAN interface bitrate
-log_debug "Setting CAN bitrate to $CAN_BITRATE"
-if ! ip link set "$CAN_INTERFACE" type can bitrate "$CAN_BITRATE"; then
-    bashio::log.fatal "Failed to set CAN bitrate for $CAN_INTERFACE. Please ensure:"
-    bashio::log.fatal "  1. CAN hardware is connected (USB-CAN adapter, CAN HAT, etc.)"
-    bashio::log.fatal "  2. Hardware is recognized by the system"
-    bashio::log.fatal "  3. Correct interface name is configured"
+# Set up CAN interface with bitrate (exact copy from working add-on)
+bashio::log.info "Setting up CAN interface with bitrate $CAN_BITRATE"
+if ! ip link set "$CAN_INTERFACE" up type can bitrate "$CAN_BITRATE"; then
+    bashio::log.fatal "Failed to set CAN interface up with bitrate $CAN_BITRATE"
+    bashio::log.fatal "Please ensure CAN hardware is connected and recognized"
     exit 1
 fi
 
-# Bring interface up
-log_debug "Bringing CAN interface up"
+# Bring interface up (second command from working add-on)
 if ! ip link set "$CAN_INTERFACE" up; then
-    bashio::log.fatal "Failed to bring CAN interface up. Check hardware connection."
+    bashio::log.fatal "Failed to bring CAN interface up"
     exit 1
 fi
+
+# Print final status for debugging
+bashio::log.info "Final interface status:"
+ip link show "$CAN_INTERFACE"
 
 bashio::log.info "✅ CAN interface $CAN_INTERFACE initialized successfully at ${CAN_BITRATE} bps"
 
