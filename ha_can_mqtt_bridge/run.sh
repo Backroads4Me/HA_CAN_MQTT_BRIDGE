@@ -90,7 +90,7 @@ validate_can_interface() {
     fi
 
     # Verify interface is operational
-    if ! ip link show "$CAN_INTERFACE" | grep -q "state UP"; then
+    if ! ip link show "$CAN_INTERFACE" | grep -q "UP"; then
         bashio::log.fatal "CAN interface $CAN_INTERFACE is not in UP state"
         return 1
     fi
