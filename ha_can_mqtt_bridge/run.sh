@@ -282,13 +282,44 @@ bashio::log.info "Starting MQTT->CAN bridge..."
                 # Convert frame format if needed (from raw hex to ID#DATA format)
                 if [[ "$message" =~ ^[0-9A-Fa-f]+$ ]] && [[ ${#message} -gt 8 ]]; then
                     # Extract CAN ID (first 8 characters) and data (remaining)
-                    can_id="${message:0:8}"
+                    raw_can_id="${message:0:8}"
                     can_data="${message:8}"
+
+                    # Pad CAN ID to 8 characters if needed for Extended Frame Format
+                    if [ ${#raw_can_id} -lt 8 ]; then
+                        # Pad with leading zeros to make it 8 chars (Extended Frame Format)
+                        can_id=$(printf "%08s" "$raw_can_id")
+                    else
+                        can_id="$raw_can_id"
+                    fi
+
+                    # Validate data length (max 8 bytes = 16 hex chars)
+                    if [ ${#can_data} -gt 16 ]; then
+                        bashio::log.warning "[$(date '+%H:%M:%S')] Data too long (${#can_data} chars), truncating to 16 chars"
+                        can_data="${can_data:0:16}"
+                    fi
+
                     formatted_message="${can_id}#${can_data}"
-                    bashio::log.info "[$(date '+%H:%M:%S')] Converted: $message -> $formatted_message"
+                    bashio::log.info "[$(date '+%H:%M:%S')] Converted: $message -> $formatted_message (ID: $can_id, Data: $can_data)"
                 else
-                    # Already in correct format or different format
-                    formatted_message="$message"
+                    # Check if it's already in ID#DATA format but needs CAN ID padding
+                    if [[ "$message" =~ ^[0-9A-Fa-f]+#[0-9A-Fa-f]*$ ]]; then
+                        # Split existing ID#DATA format
+                        existing_id="${message%#*}"
+                        existing_data="${message#*#}"
+
+                        # Pad CAN ID if it's 7 characters (common for Extended Frames)
+                        if [ ${#existing_id} -eq 7 ]; then
+                            padded_id="0${existing_id}"
+                            formatted_message="${padded_id}#${existing_data}"
+                            bashio::log.info "[$(date '+%H:%M:%S')] Padded CAN ID: $message -> $formatted_message"
+                        else
+                            formatted_message="$message"
+                        fi
+                    else
+                        # Different format, use as-is
+                        formatted_message="$message"
+                    fi
                 fi
 
                 # Send with detailed error logging
