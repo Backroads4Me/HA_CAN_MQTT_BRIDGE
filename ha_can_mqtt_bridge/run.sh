@@ -258,7 +258,8 @@ bashio::log.info "Starting CAN->MQTT bridge..."
 
 # Create named pipe for CAN frames
 CAN_PIPE="/tmp/can_frames"
-mkfifo "$CAN_PIPE" 2>/dev/null || rm -f "$CAN_PIPE" && mkfifo "$CAN_PIPE"
+rm -f "$CAN_PIPE" 2>/dev/null || true
+mkfifo "$CAN_PIPE"
 
 # Start persistent MQTT publisher
 {
