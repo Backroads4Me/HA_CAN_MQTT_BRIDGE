@@ -261,8 +261,9 @@ bashio::log.info "Starting CAN->MQTT bridge..."
         done | mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
                             -t "$MQTT_TOPIC_RAW" -q 1 -l
 
-        bashio::log.warning "CAN->MQTT bridge disconnected, reconnecting in 5 seconds..."
-        sleep 5
+        # Reduce log noise - only log reconnection in debug mode
+        log_debug "CAN->MQTT bridge reconnecting..."
+        sleep 30    # Longer delay to reduce connection frequency
     done
 } &
 CAN_TO_MQTT_PID=$!
