@@ -151,9 +151,6 @@ cleanup() {
                   ${MQTT_USER:+-u "$MQTT_USER"} ${MQTT_PASS:+-P "$MQTT_PASS"} \
                   -t "$MQTT_TOPIC_STATUS" -m "bridge_offline" -q 1 -r 2>/dev/null || true
     
-    # Clean up named pipe
-    rm -f "/tmp/can_frames" 2>/dev/null || true
-
     # Bring down CAN interface
     ip link set "$CAN_INTERFACE" down 2>/dev/null || true
 
@@ -253,39 +250,21 @@ fi
 # Start Bridge Processes
 # ========================
 
-# CAN -> MQTT Bridge (with persistent connection using named pipe)
+# CAN -> MQTT Bridge (simplified persistent connection)
 bashio::log.info "Starting CAN->MQTT bridge..."
-
-# Create named pipe for CAN frames
-CAN_PIPE="/tmp/can_frames"
-rm -f "$CAN_PIPE" 2>/dev/null || true
-mkfifo "$CAN_PIPE"
-
-# Start persistent MQTT publisher
 {
     while true; do
-        log_debug "Starting persistent MQTT publisher"
-        mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
-                      -t "$MQTT_TOPIC_RAW" -q 1 -l < "$CAN_PIPE"
-
-        bashio::log.warning "MQTT publisher disconnected, reconnecting in 5 seconds..."
-        sleep 5
-    done
-} &
-
-# Start CAN frame reader
-{
-    while true; do
-        log_debug "Starting candump process"
+        log_debug "Starting candump -> MQTT bridge"
         candump -L "$CAN_INTERFACE" 2>/dev/null | awk '{print $3}' | \
         while IFS= read -r frame; do
             if [ -n "$frame" ]; then
                 log_debug "CAN->MQTT: $frame"
-                echo "$frame" > "$CAN_PIPE"
+                echo "$frame"
             fi
-        done
+        done | mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
+                            -t "$MQTT_TOPIC_RAW" -q 1 -l
 
-        bashio::log.warning "CAN reader disconnected, reconnecting in 5 seconds..."
+        bashio::log.warning "CAN->MQTT bridge disconnected, reconnecting in 5 seconds..."
         sleep 5
     done
 } &
