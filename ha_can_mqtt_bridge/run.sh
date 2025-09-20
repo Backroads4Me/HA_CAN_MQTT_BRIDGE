@@ -251,7 +251,7 @@ fi
 bashio::log.info "Starting CAN->MQTT bridge..."
 {
     while true; do
-        log_debug "Starting candump -> MQTT bridge"
+        bashio::log.info "[$(date '+%H:%M:%S')] Starting CAN->MQTT bridge connection"
         candump -L "$CAN_INTERFACE" 2>/dev/null | awk '{print $3}' | \
         while IFS= read -r frame; do
             if [ -n "$frame" ]; then
@@ -261,9 +261,8 @@ bashio::log.info "Starting CAN->MQTT bridge..."
         done | mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
                             -t "$MQTT_TOPIC_RAW" -q 1 -l
 
-        # Reduce log noise - only log reconnection in debug mode
-        log_debug "CAN->MQTT bridge reconnecting..."
-        sleep 30    # Longer delay to reduce connection frequency
+        bashio::log.warning "[$(date '+%H:%M:%S')] CAN->MQTT bridge disconnected, reconnecting in 30 seconds..."
+        sleep 30
     done
 } &
 CAN_TO_MQTT_PID=$!
@@ -278,11 +277,28 @@ bashio::log.info "Starting MQTT->CAN bridge..."
                       -t "$MQTT_TOPIC_SEND" -q 1 2>/dev/null | \
         while IFS= read -r message; do
             if [ -n "$message" ]; then
-                log_debug "MQTT->CAN: $message"
-                if cansend "$CAN_INTERFACE" "$message" 2>/dev/null; then
-                    log_debug "Successfully sent CAN frame: $message"
+                bashio::log.info "[$(date '+%H:%M:%S')] MQTT->CAN received: $message"
+
+                # Convert frame format if needed (from raw hex to ID#DATA format)
+                if [[ "$message" =~ ^[0-9A-Fa-f]+$ ]] && [[ ${#message} -gt 8 ]]; then
+                    # Extract CAN ID (first 8 characters) and data (remaining)
+                    can_id="${message:0:8}"
+                    can_data="${message:8}"
+                    formatted_message="${can_id}#${can_data}"
+                    bashio::log.info "[$(date '+%H:%M:%S')] Converted: $message -> $formatted_message"
                 else
-                    bashio::log.warning "Failed to send CAN frame: $message"
+                    # Already in correct format or different format
+                    formatted_message="$message"
+                fi
+
+                # Send with detailed error logging
+                if cansend_output=$(cansend "$CAN_INTERFACE" "$formatted_message" 2>&1); then
+                    bashio::log.info "[$(date '+%H:%M:%S')] ✅ Successfully sent CAN frame: $formatted_message"
+                else
+                    bashio::log.error "[$(date '+%H:%M:%S')] ❌ Failed to send CAN frame: $formatted_message"
+                    bashio::log.error "[$(date '+%H:%M:%S')] Error details: $cansend_output"
+                    bashio::log.error "[$(date '+%H:%M:%S')] Original MQTT message: $message"
+                    bashio::log.error "[$(date '+%H:%M:%S')] CAN interface status: $(ip link show "$CAN_INTERFACE" | head -1)"
                 fi
             fi
         done
@@ -359,24 +375,31 @@ bashio::log.info "Monitoring bridge processes. Press Ctrl+C or stop the add-on t
 # Process Monitoring
 # ========================
 while true; do
+    current_time=$(date '+%H:%M:%S')
+
     # Check if either process died
     if ! kill -0 "$CAN_TO_MQTT_PID" 2>/dev/null; then
-        bashio::log.error "CAN->MQTT process died unexpectedly"
+        bashio::log.error "[$current_time] CAN->MQTT process died unexpectedly (PID: $CAN_TO_MQTT_PID)"
         update_health_check "UNHEALTHY: CAN->MQTT process died"
         cleanup
         exit 1
     fi
-    
+
     if ! kill -0 "$MQTT_TO_CAN_PID" 2>/dev/null; then
-        bashio::log.error "MQTT->CAN process died unexpectedly"
+        bashio::log.error "[$current_time] MQTT->CAN process died unexpectedly (PID: $MQTT_TO_CAN_PID)"
         update_health_check "UNHEALTHY: MQTT->CAN process died"
         cleanup
         exit 1
     fi
-    
-    # Update health check status
+
+    # Debug: Log process monitoring status every 60 seconds
+    if [ $(($(date +%s) % 60)) -eq 0 ]; then
+        bashio::log.info "[$current_time] Process monitor: CAN->MQTT (PID: $CAN_TO_MQTT_PID), MQTT->CAN (PID: $MQTT_TO_CAN_PID) - all healthy"
+    fi
+
+    # Update health check status (local file only)
     update_health_check "OK"
-    
+
     # Wait before next check
     sleep 10
 done
