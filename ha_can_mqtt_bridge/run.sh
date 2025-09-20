@@ -118,10 +118,10 @@ update_health_check() {
 # ========================
 create_ha_sensors() {
     bashio::log.info "Creating Home Assistant sensor entities..."
-    
+
     # Create CAN bus status sensor
     if bashio::supervisor.ping; then
-        bashio::api.supervisor POST /core/api/states/sensor.can_bridge_status << EOF
+        if bashio::api.supervisor POST /core/api/states/sensor.can_bridge_status << EOF 2>/dev/null
         {
             "state": "online",
             "attributes": {
@@ -131,9 +131,14 @@ create_ha_sensors() {
             }
         }
 EOF
-        
+        then
+            bashio::log.info "✅ CAN Bridge Status sensor created"
+        else
+            bashio::log.warning "⚠️ Could not create CAN Bridge Status sensor (API permissions)"
+        fi
+
         # Create CAN bus message count sensor
-        bashio::api.supervisor POST /core/api/states/sensor.can_message_count << EOF
+        if bashio::api.supervisor POST /core/api/states/sensor.can_message_count << EOF 2>/dev/null
         {
             "state": "0",
             "attributes": {
@@ -143,8 +148,13 @@ EOF
             }
         }
 EOF
-        
-        bashio::log.info "✅ Home Assistant sensors created"
+        then
+            bashio::log.info "✅ CAN Message Count sensor created"
+        else
+            bashio::log.warning "⚠️ Could not create CAN Message Count sensor (API permissions)"
+        fi
+
+        bashio::log.info "Home Assistant sensor setup completed (some may have failed due to permissions)"
     else
         bashio::log.warning "⚠️ Could not create Home Assistant sensors - API not available"
     fi
