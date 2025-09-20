@@ -60,26 +60,42 @@ MQTT_TO_CAN_PID=""
 # ========================
 validate_config() {
     bashio::log.info "Validating configuration..."
-    
-    # Check if CAN interface exists
-    if ! ip link show | grep -q "$CAN_INTERFACE"; then
-        bashio::log.fatal "CAN interface $CAN_INTERFACE does not exist"
-        return 1
-    fi
-    
+
     # Validate MQTT connection parameters
     if [[ -z "$MQTT_HOST" ]]; then
         bashio::log.fatal "MQTT host is required"
         return 1
     fi
-    
+
     # Validate MQTT port
     if ! [[ "$MQTT_PORT" =~ ^[0-9]+$ ]] || [ "$MQTT_PORT" -lt 1 ] || [ "$MQTT_PORT" -gt 65535 ]; then
         bashio::log.fatal "Invalid MQTT port: $MQTT_PORT"
         return 1
     fi
-    
+
     bashio::log.info "✅ Configuration validation passed"
+    return 0
+}
+
+# ========================
+# CAN Interface Validation (after initialization)
+# ========================
+validate_can_interface() {
+    bashio::log.info "Validating CAN interface after initialization..."
+
+    # Check if CAN interface exists and is up
+    if ! ip link show | grep -q "$CAN_INTERFACE"; then
+        bashio::log.fatal "CAN interface $CAN_INTERFACE does not exist after initialization"
+        return 1
+    fi
+
+    # Verify interface is operational
+    if ! ip link show "$CAN_INTERFACE" | grep -q "UP"; then
+        bashio::log.fatal "CAN interface $CAN_INTERFACE failed to initialize properly"
+        return 1
+    fi
+
+    bashio::log.info "✅ CAN interface validation passed"
     return 0
 }
 
@@ -208,36 +224,62 @@ bashio::log.info "Topics - Raw: $MQTT_TOPIC_RAW, Send: $MQTT_TOPIC_SEND, Status:
 echo
 
 # ========================
-# CAN Interface Initialization
+# CAN Interface Detection and Initialization
 # ========================
-bashio::log.info "Initializing CAN interface..."
+bashio::log.info "Detecting and initializing CAN interface..."
 
-# Bring interface down first (ignore errors if already down)
-ip link set "$CAN_INTERFACE" down 2>/dev/null || {
-    bashio::log.warning "Interface $CAN_INTERFACE was not up (this is normal on first run)"
-}
+# First, check if hardware CAN interface exists
+HARDWARE_CAN_EXISTS=false
+if ip link show 2>/dev/null | grep -q "$CAN_INTERFACE"; then
+    bashio::log.info "Hardware CAN interface $CAN_INTERFACE detected"
+    HARDWARE_CAN_EXISTS=true
+else
+    bashio::log.info "No hardware CAN interface detected, attempting to create virtual interface"
 
-# Configure CAN interface
-log_debug "Setting CAN bitrate to $CAN_BITRATE"
-if ! ip link set "$CAN_INTERFACE" type can bitrate "$CAN_BITRATE"; then
-    bashio::log.fatal "Failed to set CAN bitrate. Check if interface exists and is supported."
-    exit 1
+    # Load CAN kernel modules if not already loaded
+    modprobe can 2>/dev/null || bashio::log.warning "Could not load 'can' module (may already be loaded)"
+    modprobe can_raw 2>/dev/null || bashio::log.warning "Could not load 'can_raw' module (may already be loaded)"
+    modprobe vcan 2>/dev/null || bashio::log.warning "Could not load 'vcan' module (may already be loaded)"
+
+    # Try to create virtual CAN interface for testing
+    if ip link add dev "$CAN_INTERFACE" type vcan 2>/dev/null; then
+        bashio::log.info "Created virtual CAN interface $CAN_INTERFACE for testing"
+        HARDWARE_CAN_EXISTS=true
+    else
+        bashio::log.warning "Could not create virtual CAN interface"
+    fi
 fi
 
-# Bring interface up
-log_debug "Bringing CAN interface up"
-if ! ip link set "$CAN_INTERFACE" up; then
-    bashio::log.fatal "Failed to bring CAN interface up. Check hardware connection."
+# Proceed with initialization if interface is available
+if [ "$HARDWARE_CAN_EXISTS" = "true" ]; then
+    # Bring interface down first (ignore errors if already down)
+    ip link set "$CAN_INTERFACE" down 2>/dev/null || {
+        bashio::log.info "Interface $CAN_INTERFACE was not up (this is normal on first run)"
+    }
+
+    # Configure CAN interface (skip bitrate for vcan)
+    if ip link show "$CAN_INTERFACE" | grep -q "vcan"; then
+        bashio::log.info "Virtual CAN interface detected, skipping bitrate configuration"
+    else
+        log_debug "Setting CAN bitrate to $CAN_BITRATE"
+        if ! ip link set "$CAN_INTERFACE" type can bitrate "$CAN_BITRATE"; then
+            bashio::log.fatal "Failed to set CAN bitrate. Check if interface exists and is supported."
+            exit 1
+        fi
+    fi
+
+    # Bring interface up
+    log_debug "Bringing CAN interface up"
+    if ! ip link set "$CAN_INTERFACE" up; then
+        bashio::log.fatal "Failed to bring CAN interface up. Check hardware connection."
+        exit 1
+    fi
+
+    bashio::log.info "✅ CAN interface $CAN_INTERFACE initialized successfully"
+else
+    bashio::log.fatal "No CAN interface available. Please ensure CAN hardware is connected or kernel modules are loaded."
     exit 1
 fi
-
-# Verify interface is operational
-if ! ip link show "$CAN_INTERFACE" | grep -q "UP"; then
-    bashio::log.fatal "CAN interface $CAN_INTERFACE failed to initialize properly"
-    exit 1
-fi
-
-bashio::log.info "✅ CAN interface $CAN_INTERFACE initialized successfully"
 
 # ========================
 # MQTT Connection Test
@@ -269,6 +311,12 @@ fi
 # Run configuration validation
 if ! validate_config; then
     bashio::log.fatal "Configuration validation failed. Exiting."
+    exit 1
+fi
+
+# Run CAN interface validation after initialization
+if ! validate_can_interface; then
+    bashio::log.fatal "CAN interface validation failed. Exiting."
     exit 1
 fi
 
