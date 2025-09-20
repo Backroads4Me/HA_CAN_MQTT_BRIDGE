@@ -151,9 +151,12 @@ cleanup() {
                   ${MQTT_USER:+-u "$MQTT_USER"} ${MQTT_PASS:+-P "$MQTT_PASS"} \
                   -t "$MQTT_TOPIC_STATUS" -m "bridge_offline" -q 1 -r 2>/dev/null || true
     
+    # Clean up named pipe
+    rm -f "/tmp/can_frames" 2>/dev/null || true
+
     # Bring down CAN interface
     ip link set "$CAN_INTERFACE" down 2>/dev/null || true
-    
+
     bashio::log.info "Cleanup completed"
     exit 0
 }
@@ -250,8 +253,26 @@ fi
 # Start Bridge Processes
 # ========================
 
-# CAN -> MQTT Bridge (with error handling and reconnection)
+# CAN -> MQTT Bridge (with persistent connection using named pipe)
 bashio::log.info "Starting CAN->MQTT bridge..."
+
+# Create named pipe for CAN frames
+CAN_PIPE="/tmp/can_frames"
+mkfifo "$CAN_PIPE" 2>/dev/null || rm -f "$CAN_PIPE" && mkfifo "$CAN_PIPE"
+
+# Start persistent MQTT publisher
+{
+    while true; do
+        log_debug "Starting persistent MQTT publisher"
+        mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
+                      -t "$MQTT_TOPIC_RAW" -q 1 -l < "$CAN_PIPE"
+
+        bashio::log.warning "MQTT publisher disconnected, reconnecting in 5 seconds..."
+        sleep 5
+    done
+} &
+
+# Start CAN frame reader
 {
     while true; do
         log_debug "Starting candump process"
@@ -259,12 +280,11 @@ bashio::log.info "Starting CAN->MQTT bridge..."
         while IFS= read -r frame; do
             if [ -n "$frame" ]; then
                 log_debug "CAN->MQTT: $frame"
-                echo "$frame"
+                echo "$frame" > "$CAN_PIPE"
             fi
-        done | mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
-                            -t "$MQTT_TOPIC_RAW" -q 1 -l
-        
-        bashio::log.warning "CAN->MQTT bridge disconnected, reconnecting in 5 seconds..."
+        done
+
+        bashio::log.warning "CAN reader disconnected, reconnecting in 5 seconds..."
         sleep 5
     done
 } &
@@ -300,8 +320,13 @@ bashio::log.info "✅ MQTT->CAN bridge started (PID: $MQTT_TO_CAN_PID)"
 # Announce Online Status
 # ========================
 sleep 2  # Give bridges time to start
-mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
-              -t "$MQTT_TOPIC_STATUS" -m "bridge_online" -q 1 -r
+
+# Use a single connection for status messages
+{
+    echo "bridge_online"
+    sleep 1
+} | mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
+                  -t "$MQTT_TOPIC_STATUS" -q 1 -r -l
 
 # ========================
 # Start Ingress Web Server
