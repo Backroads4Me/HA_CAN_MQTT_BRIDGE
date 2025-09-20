@@ -105,12 +105,9 @@ validate_can_interface() {
 update_health_check() {
     local status=$1
     echo "$status" > /var/run/s6/healthcheck/status
-    
-    # Also publish to MQTT if we're online
-    if [ "$status" = "OK" ]; then
-        mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
-                     -t "$MQTT_TOPIC_STATUS" -m "bridge_healthy" -q 1 -r 2>/dev/null || true
-    fi
+
+    # Note: Removed frequent MQTT publishing to reduce connection spam
+    # Status is published only at startup and shutdown
 }
 
 
