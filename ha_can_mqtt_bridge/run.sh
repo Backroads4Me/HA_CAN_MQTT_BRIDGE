@@ -113,68 +113,6 @@ update_health_check() {
     fi
 }
 
-# ========================
-# Home Assistant Integration
-# ========================
-create_ha_sensors() {
-    bashio::log.info "Creating Home Assistant sensor entities..."
-
-    # Create CAN bus status sensor
-    if bashio::supervisor.ping; then
-        if bashio::api.supervisor POST /core/api/states/sensor.can_bridge_status << EOF 2>/dev/null
-        {
-            "state": "online",
-            "attributes": {
-                "friendly_name": "CAN Bridge Status",
-                "device_class": "connectivity",
-                "icon": "mdi:car-connected"
-            }
-        }
-EOF
-        then
-            bashio::log.info "✅ CAN Bridge Status sensor created"
-        else
-            bashio::log.warning "⚠️ Could not create CAN Bridge Status sensor (API permissions)"
-        fi
-
-        # Create CAN bus message count sensor
-        if bashio::api.supervisor POST /core/api/states/sensor.can_message_count << EOF 2>/dev/null
-        {
-            "state": "0",
-            "attributes": {
-                "friendly_name": "CAN Messages Processed",
-                "unit_of_measurement": "messages",
-                "icon": "mdi:counter"
-            }
-        }
-EOF
-        then
-            bashio::log.info "✅ CAN Message Count sensor created"
-        else
-            bashio::log.warning "⚠️ Could not create CAN Message Count sensor (API permissions)"
-        fi
-
-        bashio::log.info "Home Assistant sensor setup completed (some may have failed due to permissions)"
-    else
-        bashio::log.warning "⚠️ Could not create Home Assistant sensors - API not available"
-    fi
-}
-
-# Function to update Home Assistant sensors
-update_ha_sensor() {
-    local entity_id=$1
-    local state=$2
-    local attributes=$3
-    
-    if bashio::supervisor.ping; then
-        bashio::api.supervisor POST /core/api/states/${entity_id} << EOF
-        {
-            "state": "${state}",
-            "attributes": ${attributes}
-        }
-EOF
-    fi
-}
 
 # ========================
 # Logging Functions
@@ -307,8 +245,6 @@ if ! validate_can_interface; then
     exit 1
 fi
 
-# Create Home Assistant sensors
-create_ha_sensors
 
 # ========================
 # Start Bridge Processes
