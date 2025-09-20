@@ -19,7 +19,6 @@ boot: manual
 rating: 2
 privileged:
   - NET_ADMIN
-  - NET_RAW
 host_network: true
 kernel_modules: true
 devices:
