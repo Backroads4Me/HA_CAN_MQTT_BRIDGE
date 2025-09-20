@@ -2,6 +2,6 @@ name: "CAN to MQTT Bridge Repository"
 url: 'https://github.com/Backroads4Me/HA_CAN_MQTT_BRIDGE'
 maintainer: "Ted Lanham <rvlink@goodpath.me>"
 description: "Home Assistant add-on repository for CAN bus integration via MQTT"
-homeassistant: "2025.8.0"
-location: HA_CAN_MQTT_BRIDGE
+homeassistant: "2023.8.0"
+location: "."
 release: "stable"
