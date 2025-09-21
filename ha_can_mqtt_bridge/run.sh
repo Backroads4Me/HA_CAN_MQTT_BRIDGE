@@ -106,7 +106,6 @@ update_health_check() {
     local status=$1
     echo "$status" > /var/run/s6/healthcheck/status
 
-    # Note: Removed frequent MQTT publishing to reduce connection spam
     # Status is published only at startup and shutdown
 }
 
@@ -220,16 +219,6 @@ else
     exit 1
 fi
 
-# ========================
-# Home Assistant API Check
-# ========================
-bashio::log.info "Checking Home Assistant API connection..."
-if bashio::supervisor.ping; then
-    bashio::log.info "✅ Home Assistant API connection successful"
-else
-    bashio::log.warning "⚠️ Home Assistant API connection failed - some features may be limited"
-fi
-
 # Run configuration validation
 if ! validate_config; then
     bashio::log.fatal "Configuration validation failed. Exiting."
@@ -258,8 +247,13 @@ bashio::log.info "Starting CAN->MQTT bridge..."
                 log_debug "CAN->MQTT: $frame"
                 echo "$frame"
             fi
-        done | mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
-                            -t "$MQTT_TOPIC_RAW" -q 1 -l
+        done | {
+            bashio::log.info "[$(date '+%H:%M:%S')] CAN->MQTT publisher starting..."
+            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
+                          -t "$MQTT_TOPIC_RAW" -q 1 -l
+            exit_code=$?
+            bashio::log.warning "[$(date '+%H:%M:%S')] CAN->MQTT publisher exited with code $exit_code"
+        }
 
         bashio::log.warning "[$(date '+%H:%M:%S')] CAN->MQTT bridge disconnected, reconnecting in 30 seconds..."
         sleep 30
@@ -272,7 +266,7 @@ bashio::log.info "✅ CAN->MQTT bridge started (PID: $CAN_TO_MQTT_PID)"
 bashio::log.info "Starting MQTT->CAN bridge..."
 {
     while true; do
-        log_debug "Starting mosquitto_sub process"
+        bashio::log.info "[$(date '+%H:%M:%S')] Starting MQTT->CAN bridge connection"
         mosquitto_sub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
                       -t "$MQTT_TOPIC_SEND" -q 1 2>/dev/null | \
         while IFS= read -r message; do
@@ -334,8 +328,8 @@ bashio::log.info "Starting MQTT->CAN bridge..."
             fi
         done
         
-        bashio::log.warning "MQTT->CAN bridge disconnected, reconnecting in 5 seconds..."
-        sleep 5
+        bashio::log.warning "[$(date '+%H:%M:%S')] MQTT->CAN bridge disconnected, reconnecting in 30 seconds..."
+        sleep 30
     done
 } &
 MQTT_TO_CAN_PID=$!
