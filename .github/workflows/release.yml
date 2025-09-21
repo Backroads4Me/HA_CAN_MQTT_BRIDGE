@@ -38,15 +38,19 @@ jobs:
           username: ${{ env.OWNER }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get version
+      - name: Get version from tag
         id: version
-        uses: docker/metadata-action@v4
-        with:
-          images: ghcr.io/${{ env.OWNER }}/ha_can_mqtt_bridge
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            # Remove 'v' prefix if present
+            VERSION=${VERSION#v}
+          else
+            # Fallback for manual runs
+            VERSION=$(grep -E '^version:' ./ha_can_mqtt_bridge/config.yaml | cut -d'"' -f2)
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Generated version: $VERSION"
 
       - name: Pull base image
         run: docker pull ghcr.io/home-assistant/${{ matrix.arch }}-base:latest
