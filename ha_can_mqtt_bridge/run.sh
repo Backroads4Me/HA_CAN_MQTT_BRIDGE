@@ -211,11 +211,12 @@ MQTT_AUTH_ARGS=""
 [ -n "$MQTT_USER" ] && MQTT_AUTH_ARGS="$MQTT_AUTH_ARGS -u $MQTT_USER"
 [ -n "$MQTT_PASS" ] && MQTT_AUTH_ARGS="$MQTT_AUTH_ARGS -P $MQTT_PASS"
 
+bashio::log.info "[$(date '+%H:%M:%S')] Testing MQTT with bridge_starting message..."
 if mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
    -t "$MQTT_TOPIC_STATUS" -m "bridge_starting" -q 1 >/dev/null 2>&1; then
-    bashio::log.info "✅ MQTT connection successful"
+    bashio::log.info "[$(date '+%H:%M:%S')] ✅ MQTT connection successful"
 else
-    bashio::log.fatal "❌ MQTT connection failed - check broker settings and credentials"
+    bashio::log.fatal "[$(date '+%H:%M:%S')] ❌ MQTT connection failed - check broker settings and credentials"
     exit 1
 fi
 
@@ -341,11 +342,13 @@ bashio::log.info "✅ MQTT->CAN bridge started (PID: $MQTT_TO_CAN_PID)"
 sleep 2  # Give bridges time to start
 
 # Use a single connection for status messages
+bashio::log.info "[$(date '+%H:%M:%S')] Publishing bridge_online status..."
 {
     echo "bridge_online"
     sleep 1
 } | mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
                   -t "$MQTT_TOPIC_STATUS" -q 1 -r -l
+bashio::log.info "[$(date '+%H:%M:%S')] Bridge_online status published"
 
 # ========================
 # Start Ingress Web Server
@@ -420,6 +423,20 @@ while true; do
     # Debug: Log process monitoring status every 60 seconds
     if [ $(($(date +%s) % 60)) -eq 0 ]; then
         bashio::log.info "[$current_time] Process monitor: CAN->MQTT (PID: $CAN_TO_MQTT_PID), MQTT->CAN (PID: $MQTT_TO_CAN_PID) - all healthy"
+
+        # Check for any mosquitto processes
+        if ps aux | grep -q "[m]osquitto"; then
+            bashio::log.info "[$current_time] Active mosquitto processes:"
+            ps aux | grep "[m]osquitto" | while read line; do
+                bashio::log.info "[$current_time]   $line"
+            done
+        fi
+
+        # Log network connections
+        if command -v ss >/dev/null 2>&1; then
+            mqtt_connections=$(ss -tn | grep ":1883" | wc -l)
+            bashio::log.info "[$current_time] Active MQTT connections: $mqtt_connections"
+        fi
     fi
 
     # Update health check status (local file only)

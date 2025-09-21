@@ -1,7 +1,7 @@
 # Add-on configuration file: config.yaml
 
 name: "CAN to MQTT Bridge"
-version: "1.0.26"
+version: "1.0.27"
 slug: "ha_can_mqtt_bridge"
 description: "Initializes CAN interface and provides a bidirectional CAN-MQTT bridge"
 url: "https://github.com/Backroads4Me/HA_CAN_MQTT_BRIDGE"
