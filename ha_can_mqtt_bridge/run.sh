@@ -211,12 +211,12 @@ MQTT_AUTH_ARGS=""
 [ -n "$MQTT_USER" ] && MQTT_AUTH_ARGS="$MQTT_AUTH_ARGS -u $MQTT_USER"
 [ -n "$MQTT_PASS" ] && MQTT_AUTH_ARGS="$MQTT_AUTH_ARGS -P $MQTT_PASS"
 
-bashio::log.info "[$(date '+%H:%M:%S')] Testing MQTT with bridge_starting message..."
+bashio::log.info "Testing MQTT connection..."
 if mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
    -t "$MQTT_TOPIC_STATUS" -m "bridge_starting" -q 1 >/dev/null 2>&1; then
-    bashio::log.info "[$(date '+%H:%M:%S')] ✅ MQTT connection successful"
+    bashio::log.info "✅ MQTT connection successful"
 else
-    bashio::log.fatal "[$(date '+%H:%M:%S')] ❌ MQTT connection failed - check broker settings and credentials"
+    bashio::log.fatal "❌ MQTT connection failed - check broker settings and credentials"
     exit 1
 fi
 
@@ -241,22 +241,17 @@ fi
 bashio::log.info "Starting CAN->MQTT bridge..."
 {
     while true; do
-        bashio::log.info "[$(date '+%H:%M:%S')] Starting CAN->MQTT bridge connection"
+        log_debug "Starting CAN->MQTT bridge connection"
         candump -L "$CAN_INTERFACE" 2>/dev/null | awk '{print $3}' | \
         while IFS= read -r frame; do
             if [ -n "$frame" ]; then
                 log_debug "CAN->MQTT: $frame"
                 echo "$frame"
             fi
-        done | {
-            bashio::log.info "[$(date '+%H:%M:%S')] CAN->MQTT publisher starting..."
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
-                          -t "$MQTT_TOPIC_RAW" -q 1 -l
-            exit_code=$?
-            bashio::log.warning "[$(date '+%H:%M:%S')] CAN->MQTT publisher exited with code $exit_code"
-        }
+        done | mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
+                            -t "$MQTT_TOPIC_RAW" -q 1 -l
 
-        bashio::log.warning "[$(date '+%H:%M:%S')] CAN->MQTT bridge disconnected, reconnecting in 30 seconds..."
+        bashio::log.warning "CAN->MQTT bridge disconnected, reconnecting in 30 seconds..."
         sleep 30
     done
 } &
@@ -267,12 +262,12 @@ bashio::log.info "✅ CAN->MQTT bridge started (PID: $CAN_TO_MQTT_PID)"
 bashio::log.info "Starting MQTT->CAN bridge..."
 {
     while true; do
-        bashio::log.info "[$(date '+%H:%M:%S')] Starting MQTT->CAN bridge connection"
+        log_debug "Starting MQTT->CAN bridge connection"
         mosquitto_sub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
                       -t "$MQTT_TOPIC_SEND" -q 1 2>/dev/null | \
         while IFS= read -r message; do
             if [ -n "$message" ]; then
-                bashio::log.info "[$(date '+%H:%M:%S')] MQTT->CAN received: $message"
+                log_debug "MQTT->CAN received: $message"
 
                 # Convert frame format if needed (from raw hex to ID#DATA format)
                 if [[ "$message" =~ ^[0-9A-Fa-f]+$ ]] && [[ ${#message} -gt 8 ]]; then
@@ -295,7 +290,7 @@ bashio::log.info "Starting MQTT->CAN bridge..."
                     fi
 
                     formatted_message="${can_id}#${can_data}"
-                    bashio::log.info "[$(date '+%H:%M:%S')] Converted: $message -> $formatted_message (ID: $can_id, Data: $can_data)"
+                    log_debug "Converted: $message -> $formatted_message"
                 else
                     # Check if it's already in ID#DATA format but needs CAN ID padding
                     if [[ "$message" =~ ^[0-9A-Fa-f]+#[0-9A-Fa-f]*$ ]]; then
@@ -307,7 +302,7 @@ bashio::log.info "Starting MQTT->CAN bridge..."
                         if [ ${#existing_id} -eq 7 ]; then
                             padded_id="0${existing_id}"
                             formatted_message="${padded_id}#${existing_data}"
-                            bashio::log.info "[$(date '+%H:%M:%S')] Padded CAN ID: $message -> $formatted_message"
+                            log_debug "Padded CAN ID: $message -> $formatted_message"
                         else
                             formatted_message="$message"
                         fi
@@ -317,19 +312,18 @@ bashio::log.info "Starting MQTT->CAN bridge..."
                     fi
                 fi
 
-                # Send with detailed error logging
+                # Send with error logging
                 if cansend_output=$(cansend "$CAN_INTERFACE" "$formatted_message" 2>&1); then
-                    bashio::log.info "[$(date '+%H:%M:%S')] ✅ Successfully sent CAN frame: $formatted_message"
+                    log_debug "Successfully sent CAN frame: $formatted_message"
                 else
-                    bashio::log.error "[$(date '+%H:%M:%S')] ❌ Failed to send CAN frame: $formatted_message"
-                    bashio::log.error "[$(date '+%H:%M:%S')] Error details: $cansend_output"
-                    bashio::log.error "[$(date '+%H:%M:%S')] Original MQTT message: $message"
-                    bashio::log.error "[$(date '+%H:%M:%S')] CAN interface status: $(ip link show "$CAN_INTERFACE" | head -1)"
+                    bashio::log.error "Failed to send CAN frame: $formatted_message"
+                    bashio::log.error "Error details: $cansend_output"
+                    bashio::log.error "Original MQTT message: $message"
                 fi
             fi
         done
         
-        bashio::log.warning "[$(date '+%H:%M:%S')] MQTT->CAN bridge disconnected, reconnecting in 30 seconds..."
+        bashio::log.warning "MQTT->CAN bridge disconnected, reconnecting in 30 seconds..."
         sleep 30
     done
 } &
@@ -342,13 +336,11 @@ bashio::log.info "✅ MQTT->CAN bridge started (PID: $MQTT_TO_CAN_PID)"
 sleep 2  # Give bridges time to start
 
 # Use a single connection for status messages
-bashio::log.info "[$(date '+%H:%M:%S')] Publishing bridge_online status..."
 {
     echo "bridge_online"
     sleep 1
 } | mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" $MQTT_AUTH_ARGS \
                   -t "$MQTT_TOPIC_STATUS" -q 1 -r -l
-bashio::log.info "[$(date '+%H:%M:%S')] Bridge_online status published"
 
 # ========================
 # Start Ingress Web Server
@@ -407,36 +399,22 @@ while true; do
 
     # Check if either process died
     if ! kill -0 "$CAN_TO_MQTT_PID" 2>/dev/null; then
-        bashio::log.error "[$current_time] CAN->MQTT process died unexpectedly (PID: $CAN_TO_MQTT_PID)"
+        bashio::log.error "CAN->MQTT process died unexpectedly (PID: $CAN_TO_MQTT_PID)"
         update_health_check "UNHEALTHY: CAN->MQTT process died"
         cleanup
         exit 1
     fi
 
     if ! kill -0 "$MQTT_TO_CAN_PID" 2>/dev/null; then
-        bashio::log.error "[$current_time] MQTT->CAN process died unexpectedly (PID: $MQTT_TO_CAN_PID)"
+        bashio::log.error "MQTT->CAN process died unexpectedly (PID: $MQTT_TO_CAN_PID)"
         update_health_check "UNHEALTHY: MQTT->CAN process died"
         cleanup
         exit 1
     fi
 
-    # Debug: Log process monitoring status every 60 seconds
-    if [ $(($(date +%s) % 60)) -eq 0 ]; then
-        bashio::log.info "[$current_time] Process monitor: CAN->MQTT (PID: $CAN_TO_MQTT_PID), MQTT->CAN (PID: $MQTT_TO_CAN_PID) - all healthy"
-
-        # Check for any mosquitto processes
-        if ps aux | grep -q "[m]osquitto"; then
-            bashio::log.info "[$current_time] Active mosquitto processes:"
-            ps aux | grep "[m]osquitto" | while read line; do
-                bashio::log.info "[$current_time]   $line"
-            done
-        fi
-
-        # Log network connections
-        if command -v ss >/dev/null 2>&1; then
-            mqtt_connections=$(ss -tn | grep ":1883" | wc -l)
-            bashio::log.info "[$current_time] Active MQTT connections: $mqtt_connections"
-        fi
+    # Log process health every 5 minutes for basic monitoring
+    if [ $(($(date +%s) % 300)) -eq 0 ]; then
+        bashio::log.info "Process monitor: CAN->MQTT (PID: $CAN_TO_MQTT_PID), MQTT->CAN (PID: $MQTT_TO_CAN_PID) - all healthy"
     fi
 
     # Update health check status (local file only)

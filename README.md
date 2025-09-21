@@ -104,7 +104,6 @@ Logs include:
 Status messages published to MQTT:
 - `bridge_online`: Bridge is running
 - `bridge_offline`: Bridge has stopped
-- `bridge_healthy`: Periodic health check confirmation
 
 ## CAN Frame Format
 
